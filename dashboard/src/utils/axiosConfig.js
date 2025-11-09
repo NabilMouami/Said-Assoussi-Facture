@@ -1,12 +1,14 @@
 import axios from "axios";
 import { config_url } from "./config";
 
-const axiosInstance = axios.create({
+// Create axios instance with base configuration
+const api = axios.create({
   baseURL: config_url,
+  withCredentials: true,
 });
 
-// Add token to requests automatically
-axiosInstance.interceptors.request.use(
+// Add a request interceptor to include the token
+api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
     if (token) {
@@ -19,15 +21,17 @@ axiosInstance.interceptors.request.use(
   }
 );
 
-// Handle token expiration
-axiosInstance.interceptors.response.use(
+// Add a response interceptor to handle token expiration
+api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 403) {
+      // Token is invalid or expired
       localStorage.removeItem("token");
+      window.location.href = "/";
     }
     return Promise.reject(error);
   }
 );
 
-export default axiosInstance;
+export default api;

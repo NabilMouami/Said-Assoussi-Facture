@@ -13,6 +13,7 @@ const LoginForm = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+  // In your login component, after successful login:
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -27,13 +28,15 @@ const LoginForm = () => {
 
       // ✅ Store token in localStorage
       localStorage.setItem("token", token);
+      localStorage.setItem("user", JSON.stringify(user)); // Optional: store user data
+
       // ✅ Store user in Redux
       dispatch(detailsUser(user));
 
       // ✅ Navigate to protected route
-      navigate("/dashboard");
+      navigate("/facture/create");
     } catch (err) {
-      setError("Invalid email or password");
+      setError(err.response?.data?.message || "Invalid email or password");
       console.error(err.response?.data || err.message);
     }
   };

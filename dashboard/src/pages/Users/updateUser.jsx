@@ -1,5 +1,5 @@
-import React, { useState, useEffect, memo } from "react";
-import { config_url } from "@/utils/config";
+import React, { useState, useEffect } from "react";
+import api from "@/utils/axiosConfig";
 import {
   Modal,
   ModalHeader,
@@ -10,84 +10,185 @@ import {
   FormGroup,
   Label,
   Input,
+  Alert,
+  Spinner,
 } from "reactstrap";
 
 export const UpdateUserModal = ({ isOpen, toggle, user, onSave }) => {
-  const [firstName, setFirstName] = useState(user?.firstName || "");
-  const [lastName, setLastName] = useState(user?.firstName || "");
-  const [email, setEmail] = useState(user?.email || "");
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    role: "",
+    password: "",
+  });
+  const [successMsg, setSuccessMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
+  // Reset form when user changes or modal opens/closes
   useEffect(() => {
-    setFirstName(user?.firstName || "");
-    setLastName(user?.lastName || "");
-    setEmail(user?.email || "");
-  }, [user]);
-
-  const handleSubmit = async () => {
-    try {
-      const response = await fetch(`${config_url}/api/users/${user.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name }),
+    if (user) {
+      setFormData({
+        name: user.name || "",
+        email: user.email || "",
+        role: user.role || "",
+        password: "", // Always empty for security
       });
+    }
+    setSuccessMsg("");
+    setErrorMsg("");
+  }, [user, isOpen]);
 
-      if (!response.ok) throw new Error("Failed to update user");
+  const handleChange = (e) => {
+    const { id, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [id]: value,
+    }));
+  };
 
-      const updatedCity = await response.json();
-      onSave(updatedCity); // Update in the cities list
-      toggle(); // Close modal
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
+
+    setSubmitting(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    // Validate required fields
+    if (!formData.name || !formData.email || !formData.role) {
+      setErrorMsg("Name, email, and role are required.");
+      setSubmitting(false);
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setErrorMsg("Please enter a valid email address.");
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      // Prepare update data - only include password if provided
+      const updateData = {
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+      };
+
+      if (formData.password.trim()) {
+        updateData.password = formData.password;
+      }
+
+      const response = await api.patch(`/api/auth/${user.id}`, updateData);
+
+      setSuccessMsg("User updated successfully!");
+
+      // Clear password field after successful update
+      setFormData((prev) => ({
+        ...prev,
+        password: "",
+      }));
+
+      // Call the onSave callback to refresh the parent component
+      if (onSave) {
+        onSave(response.data.user); // Pass the updated user data
+      }
+
+      // Close modal after successful update
+      setTimeout(() => {
+        toggle();
+      }, 1500);
     } catch (err) {
       console.error("Update failed", err);
+      const errorMessage =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        "An error occurred while updating the user.";
+      setErrorMsg(errorMessage);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <Modal isOpen={isOpen} toggle={toggle}>
-      <ModalHeader toggle={toggle}>Update User</ModalHeader>
-      <ModalBody>
-        <Form>
+    <Modal isOpen={isOpen} toggle={toggle} size="lg">
+      <ModalHeader toggle={toggle}>
+        Update User {user?.name ? `- ${user.name}` : ""}
+      </ModalHeader>
+      <Form onSubmit={handleSubmit}>
+        <ModalBody>
+          {successMsg && <Alert color="success">{successMsg}</Alert>}
+          {errorMsg && <Alert color="danger">{errorMsg}</Alert>}
+
           <FormGroup>
-            <Label for="cityName">FirstName</Label>
+            <Label for="name">Full Name</Label>
             <Input
               type="text"
-              id="firstName"
-              defaultValue={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              placeholder="First Name User"
+              id="name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+              disabled={submitting}
+              placeholder="Enter full name"
             />
           </FormGroup>
+
           <FormGroup>
-            <Label for="cityName">LastName</Label>
-            <Input
-              type="text"
-              id="lastName"
-              defaultValue={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              placeholder="Last Name User"
-            />
-          </FormGroup>
-          <FormGroup>
-            <Label for="cityName">Email</Label>
+            <Label for="email">Email</Label>
             <Input
               type="email"
               id="email"
-              defaultValue={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email User"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              disabled={submitting}
+              placeholder="Enter email address"
             />
           </FormGroup>
-        </Form>
-      </ModalBody>
-      <ModalFooter>
-        <Button color="primary" onClick={handleSubmit}>
-          Save
-        </Button>
-        <Button color="secondary" onClick={toggle}>
-          Cancel
-        </Button>
-      </ModalFooter>
+
+          <FormGroup>
+            <Label for="password">New Password (optional)</Label>
+            <Input
+              type="password"
+              id="password"
+              value={formData.password}
+              onChange={handleChange}
+              placeholder="Leave blank to keep existing password"
+              disabled={submitting}
+              minLength={6}
+            />
+            <small className="form-text text-muted">
+              Minimum 6 characters. Leave empty to keep current password.
+            </small>
+          </FormGroup>
+
+          <FormGroup>
+            <Label for="role">Role</Label>
+            <Input
+              type="select"
+              id="role"
+              value={formData.role}
+              onChange={handleChange}
+              required
+              disabled={submitting}
+            >
+              <option value="">Select Role</option>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </Input>
+          </FormGroup>
+        </ModalBody>
+        <ModalFooter>
+          <Button color="primary" type="submit" disabled={submitting}>
+            {submitting ? <Spinner size="sm" /> : "Save Changes"}
+          </Button>
+          <Button color="secondary" onClick={toggle} disabled={submitting}>
+            Cancel
+          </Button>
+        </ModalFooter>
+      </Form>
     </Modal>
   );
 };

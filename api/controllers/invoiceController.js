@@ -1,7 +1,7 @@
 const Invoice = require("../models/invoice");
 const InvoiceItem = require("../models/invoiceItem");
 const Advancement = require("../models/Advancement");
-
+const PDFDocument = require("pdfkit");
 const getLastInvoiceId = async () => {
   try {
     const lastInvoice = await Invoice.findOne({
@@ -36,7 +36,10 @@ const createInvoice = async (req, res) => {
       discountValue,
       paymentType,
       advancements,
+      advancement, // numeric value (the one we check)
       remainingAmount,
+      subTotal, // Add this from request
+      total, // Add this from request
     } = req.body;
 
     // ✅ Validate customer name
@@ -44,27 +47,79 @@ const createInvoice = async (req, res) => {
       return res.status(400).json({ message: "Customer name is required" });
     }
 
+    // ✅ Validate items
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res
         .status(400)
         .json({ message: "Invoice must have at least one item" });
     }
 
-    // Generate invoice number automatically (last ID + 1)
+    // ✅ Generate invoice number automatically (last ID + 1)
     const invoiceNumber = await generateInvoiceNumber();
 
-    // Calculate item totals
+    // ✅ Calculate item totals (for verification)
     const preparedItems = items.map((item) => {
       const totalPrice =
         item.quantity * item.v1 * item.v2 * item.v3 * item.unitPrice;
       return {
         ...item,
         totalPrice,
-        articleName: item.articleName || item.product || "", // Handle both field names
+        articleName: item.articleName || item.product || "",
       };
     });
 
-    // Prepare advancements if provided
+    // ✅ Calculate totals to verify with frontend
+    const calculatedSubTotal = preparedItems.reduce(
+      (sum, item) => sum + item.totalPrice,
+      0
+    );
+
+    const calculateDiscount = () => {
+      if (discountType === "percentage") {
+        return (calculatedSubTotal * discountValue) / 100;
+      } else {
+        return discountValue || 0;
+      }
+    };
+
+    const calculatedDiscount = calculateDiscount();
+    const calculatedTotal = Math.max(
+      0,
+      calculatedSubTotal - calculatedDiscount
+    );
+
+    // Calculate total advancement
+    let totalAdvancement = 0;
+    if (advancements && Array.isArray(advancements)) {
+      totalAdvancement = advancements.reduce(
+        (sum, adv) => sum + parseFloat(adv.amount || 0),
+        0
+      );
+    }
+    if (advancement && Number(advancement) > 0) {
+      totalAdvancement += Number(advancement);
+    }
+
+    const calculatedRemainingAmount = Math.max(
+      0,
+      calculatedTotal - totalAdvancement
+    );
+
+    console.log("Calculated totals:", {
+      subTotal: calculatedSubTotal,
+      discount: calculatedDiscount,
+      total: calculatedTotal,
+      advancement: totalAdvancement,
+      remainingAmount: calculatedRemainingAmount,
+    });
+
+    console.log("Received totals:", {
+      subTotal: subTotal,
+      total: total,
+      remainingAmount: remainingAmount,
+    });
+
+    // ✅ Prepare existing advancements if any were sent
     const preparedAdvancements = advancements
       ? advancements.map((adv) => ({
           amount: adv.amount,
@@ -75,7 +130,18 @@ const createInvoice = async (req, res) => {
         }))
       : [];
 
-    // Create invoice with items
+    // ✅ If a single advancement > 0 was provided, push it as a new record
+    if (advancement && Number(advancement) > 0) {
+      preparedAdvancements.push({
+        amount: Number(advancement),
+        paymentDate: new Date(),
+        paymentMethod: paymentType || "espece",
+        reference: "",
+        notes: "Avancement initial automatique",
+      });
+    }
+
+    // ✅ Create invoice with items + advancements
     const invoice = await Invoice.create(
       {
         invoiceNumber,
@@ -87,9 +153,11 @@ const createInvoice = async (req, res) => {
         discountType: discountType || "fixed",
         discountValue: discountValue || 0,
         paymentType: paymentType || "non_paye",
-        remainingAmount: remainingAmount || 0,
-        subTotal: 0, // Will be calculated
-        total: 0, // Will be calculated
+        advancement: totalAdvancement,
+        remainingAmount: calculatedRemainingAmount, // Use calculated value
+        subTotal: calculatedSubTotal,
+        total: calculatedTotal,
+        discountAmount: calculatedDiscount,
         items: preparedItems,
         advancements: preparedAdvancements,
       },
@@ -101,14 +169,11 @@ const createInvoice = async (req, res) => {
       }
     );
 
-    // Calculate totals and update invoice
-    await invoice.reload({
-      include: [
-        { model: InvoiceItem, as: "items" },
-        { model: Advancement, as: "advancements" },
-      ],
-    });
-    invoice.calculateTotals();
+    // ✅ Don't recalculate totals if we already have them calculated correctly
+    // Remove this line if it's causing the discrepancy:
+    // invoice.calculateTotals();
+
+    // Just save the invoice as is
     await invoice.save();
 
     return res.status(201).json({
@@ -118,9 +183,8 @@ const createInvoice = async (req, res) => {
   } catch (err) {
     console.error("Create invoice error:", err);
 
-    // Handle duplicate invoice number (should rarely happen)
+    // Handle duplicate invoice number
     if (err.name === "SequelizeUniqueConstraintError") {
-      // If there's a conflict, use timestamp as fallback
       const fallbackInvoiceNumber = `FACT-${Date.now()}`;
       return res.status(409).json({
         message: "Invoice number conflict, please try again",
@@ -143,7 +207,6 @@ const createInvoice = async (req, res) => {
     });
   }
 };
-
 const getInvoices = async (req, res) => {
   try {
     const invoices = await Invoice.findAll({
@@ -376,6 +439,205 @@ const addAdvancement = async (req, res) => {
   }
 };
 
+const generateInvoicePDF = async (req, res) => {
+  try {
+    const invoice = await Invoice.findByPk(req.params.id, {
+      include: [
+        { model: InvoiceItem, as: "items" },
+        { model: Advancement, as: "advancements" },
+      ],
+    });
+
+    if (!invoice) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    const doc = new PDFDocument({ margin: 50 });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=invoice-${invoice.invoiceNumber}.pdf`
+    );
+
+    doc.pipe(res);
+
+    // ===== HEADER =====
+    doc.rect(0, 0, doc.page.width, 100).fill("#1a73e8"); // blue header background
+    doc
+      .fillColor("white")
+      .fontSize(24)
+      .font("Helvetica-Bold")
+      .text("FACTURE", 50, 40);
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .text(`N°: ${invoice.invoiceNumber}`, 450, 40)
+      .text(
+        `Date: ${new Date(invoice.issueDate).toLocaleDateString("fr-FR")}`,
+        450,
+        60
+      );
+
+    doc.moveDown(3);
+
+    // ===== CLIENT INFO =====
+    doc
+      .fillColor("#333")
+      .font("Helvetica-Bold")
+      .fontSize(14)
+      .text("Informations du client", 50, 130);
+    doc.moveTo(50, 145).lineTo(550, 145).strokeColor("#1a73e8").stroke();
+
+    doc
+      .font("Helvetica")
+      .fontSize(12)
+      .text(`Nom du client : ${invoice.customerName}`, 50, 160)
+      .text(`Téléphone : ${invoice.customerPhone || "—"}`, 50, 180);
+
+    doc.moveDown(2);
+
+    // ===== ITEMS TABLE =====
+    const tableTop = 220;
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(13)
+      .fillColor("#1a73e8")
+      .text("Article", 50, tableTop)
+      .text("Quantité", 250, tableTop)
+      .text("Prix Unitaire", 350, tableTop)
+      .text("Total", 470, tableTop);
+    doc
+      .moveTo(50, tableTop + 15)
+      .lineTo(550, tableTop + 15)
+      .strokeColor("#ccc")
+      .stroke();
+
+    let yPosition = tableTop + 25;
+    doc.font("Helvetica").fontSize(12).fillColor("#000");
+
+    invoice.items.forEach((item, i) => {
+      if (yPosition > 700) {
+        doc.addPage();
+        yPosition = 50;
+      }
+      doc.text(item.articleName || `Article ${i + 1}`, 50, yPosition);
+      doc.text(item.quantity.toString(), 270, yPosition);
+      doc.text(`${item.unitPrice} DH`, 370, yPosition);
+      doc.text(`${item.totalPrice} DH`, 470, yPosition);
+      yPosition += 20;
+    });
+
+    // ===== TOTALS SECTION =====
+    yPosition += 20;
+    doc
+      .moveTo(50, yPosition)
+      .lineTo(550, yPosition)
+      .strokeColor("#ddd")
+      .stroke();
+
+    yPosition += 15;
+    doc
+      .font("Helvetica")
+      .text(`Sous-total:`, 350, yPosition)
+      .text(`${invoice.subTotal} DH`, 470, yPosition, { align: "right" });
+
+    if (invoice.discountValue > 0) {
+      yPosition += 20;
+      const discountText =
+        invoice.discountType === "percentage"
+          ? `Remise (${invoice.discountValue}%):`
+          : "Remise:";
+      doc
+        .text(discountText, 350, yPosition)
+        .text(`-${invoice.discountAmount} DH`, 470, yPosition, {
+          align: "right",
+        });
+    }
+
+    yPosition += 25;
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(13)
+      .fillColor("#1a73e8")
+      .text(`Total TTC:`, 350, yPosition)
+      .text(`${invoice.total} DH`, 470, yPosition, { align: "right" });
+
+    // ===== ADVANCEMENTS =====
+    if (invoice.advancements && invoice.advancements.length > 0) {
+      yPosition += 40;
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(13)
+        .fillColor("#333")
+        .text("Acomptes:", 50, yPosition);
+      yPosition += 20;
+
+      doc.font("Helvetica").fontSize(12);
+      invoice.advancements.forEach((a) => {
+        doc.text(
+          `- ${a.amount} DH (${a.paymentMethod}) - ${new Date(
+            a.paymentDate
+          ).toLocaleDateString("fr-FR")}`,
+          60,
+          yPosition
+        );
+        yPosition += 15;
+      });
+
+      yPosition += 10;
+      doc
+        .font("Helvetica-Bold")
+        .text(`Montant restant: ${invoice.remainingAmount} DH`, 50, yPosition);
+    }
+
+    // ===== STATUS =====
+    yPosition += 40;
+    const statusText = {
+      brouillon: "Brouillon",
+      envoyée: "Envoyée",
+      payée: "Payée",
+      partiellement_payée: "Partiellement payée",
+      en_retard: "En retard",
+      annulée: "Annulée",
+      en_litige: "En litige",
+      en_attente: "En attente",
+      acompte_reçu: "Acompte reçu",
+    };
+
+    doc
+      .font("Helvetica-Bold")
+      .fillColor("#1a73e8")
+      .text(
+        `Statut: ${statusText[invoice.status] || invoice.status}`,
+        50,
+        yPosition
+      );
+
+    // ===== NOTES =====
+    if (invoice.notes) {
+      yPosition += 30;
+      doc
+        .font("Helvetica-Bold")
+        .fillColor("#333")
+        .text("Notes:", 50, yPosition);
+      yPosition += 15;
+      doc
+        .font("Helvetica")
+        .fillColor("#000")
+        .text(invoice.notes, 50, yPosition, { width: 500 });
+    }
+
+    doc.end();
+  } catch (err) {
+    console.error("Generate PDF error:", err);
+    return res.status(500).json({
+      message: "Error generating PDF",
+      error: err.message,
+    });
+  }
+};
+
 module.exports = {
   createInvoice,
   getInvoices,
@@ -383,4 +645,5 @@ module.exports = {
   updateInvoice,
   deleteInvoice,
   addAdvancement,
+  generateInvoicePDF,
 };

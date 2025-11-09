@@ -34,9 +34,7 @@ const statusOptions = [
   { value: "partiellement_payée", label: "Partiellement Payée" },
   { value: "en_retard", label: "En Retard" },
   { value: "annulée", label: "Annulée" },
-  { value: "en_litige", label: "En Litige" },
   { value: "en_attente", label: "En Attente" },
-  { value: "acompte_reçu", label: "Acompte Reçu" },
 ];
 
 const InvoiceTable = () => {
@@ -61,17 +59,27 @@ const InvoiceTable = () => {
       try {
         const response = await axios.get(`${config_url}/api/invoices`);
         const data = response.data;
-        const formattedData = data.map((invoice) => ({
-          id: invoice.id,
-          invoiceNumber: invoice.invoiceNumber,
-          customerName: invoice.customerName,
-          total: invoice.total,
-          status: invoice.status,
-          advancement: invoice.advancement || 0,
-          remainingAmount: invoice.remainingAmount || invoice.total,
-          customerPhone: invoice.customerPhone,
-          createdAt: new Date(invoice.createdAt).toLocaleString(),
-        }));
+
+        console.log("Data Invoices: " + JSON.stringify(data));
+        const formattedData = data.map((invoice) => {
+          const total = parseFloat(invoice.total) || 0;
+          const advancement = parseFloat(invoice.advancement) || 0;
+          const remainingAmount =
+            parseFloat(invoice.remainingAmount) || total - advancement;
+
+          return {
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            customerName: invoice.customerName,
+            customerPhone: invoice.customerPhone,
+            total,
+            advancement,
+            remainingAmount,
+            status: invoice.status,
+            createdAt: new Date(invoice.createdAt), // keep it as a Date
+            createdAtString: new Date(invoice.createdAt).toLocaleString(), // for display
+          };
+        });
 
         setBookings(formattedData);
         setFilteredBookings(formattedData);
@@ -123,9 +131,7 @@ const InvoiceTable = () => {
       partiellement_payée: "bg-warning text-dark",
       en_retard: "bg-danger text-white",
       annulée: "bg-dark text-white",
-      en_litige: "bg-purple text-white",
       en_attente: "bg-info text-white",
-      acompte_reçu: "bg-teal text-white",
     };
     return colors[status] || "bg-secondary text-white";
   };
@@ -138,28 +144,53 @@ const InvoiceTable = () => {
       partiellement_payée: "Partiellement Payée",
       en_retard: "En Retard",
       annulée: "Annulée",
-      en_litige: "En Litige",
       en_attente: "En Attente",
-      acompte_reçu: "Acompte Reçu",
     };
     return texts[status] || status;
   };
-
-  const updateBookingStatus = (updatedBooking) => {
+  const handleInvoiceUpdate = (updatedInvoice) => {
+    // Update the bookings state with the updated invoice
     setBookings((prevBookings) =>
       prevBookings.map((booking) =>
-        booking.id === updatedBooking.id
-          ? { ...booking, status: updatedBooking.status }
+        booking.id === updatedInvoice.id
+          ? {
+              ...booking,
+              customerName: updatedInvoice.customerName,
+              customerPhone: updatedInvoice.customerPhone,
+              status: updatedInvoice.status,
+              advancement: updatedInvoice.advancement || 0,
+              remainingAmount:
+                updatedInvoice.remainingAmount || updatedInvoice.total,
+              // Add any other fields that might be updated
+            }
           : booking
       )
     );
-    if (selectedStatus !== "all" && selectedStatus !== updatedBooking.status) {
-      setFilteredBookings((prev) =>
-        prev.filter((booking) => booking.id !== updatedBooking.id)
-      );
-    }
-  };
 
+    // Also update filteredBookings to reflect changes immediately
+    setFilteredBookings((prevFiltered) =>
+      prevFiltered.map((booking) =>
+        booking.id === updatedInvoice.id
+          ? {
+              ...booking,
+              customerName: updatedInvoice.customerName,
+              customerPhone: updatedInvoice.customerPhone,
+              status: updatedInvoice.status,
+              advancement: updatedInvoice.advancement || 0,
+              remainingAmount:
+                updatedInvoice.remainingAmount || updatedInvoice.total,
+            }
+          : booking
+      )
+    );
+
+    // Show success message
+    MySwal.fire({
+      title: <p>Succès</p>,
+      text: "Facture mise à jour avec succès!",
+      icon: "success",
+    });
+  };
   // Handle advancement price change
   const handleAdvancementChange = (e) => {
     const value = parseFloat(e.target.value) || 0;
@@ -289,7 +320,7 @@ const InvoiceTable = () => {
           Supprimer <strong>Cette Facture</strong>?
         </p>
       ),
-      text: "Are you sure you want to delete this Facture?",
+      text: "Etes-vous sûr de vouloir supprimer ceci Facture?",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
@@ -420,7 +451,7 @@ const InvoiceTable = () => {
     },
     {
       accessorKey: "advancement",
-      header: () => "Acompte",
+      header: () => "Avancement",
       cell: ({ getValue }) => <span>{getValue() || 0} Dh</span>,
     },
     {
@@ -446,10 +477,11 @@ const InvoiceTable = () => {
       },
     },
     {
-      accessorKey: "createdAt",
+      accessorKey: "createdAtString",
       header: () => "Date de Création",
       cell: ({ getValue }) => <span>{getValue()}</span>,
     },
+
     {
       accessorKey: "actions",
       header: () => "Actions",
@@ -457,24 +489,32 @@ const InvoiceTable = () => {
         <div className="hstack d-flex gap-4 justify-content-center">
           <div
             className="avatar-text avatar-md mr-8"
-            style={{ cursor: "pointer" }}
+            style={{
+              cursor: "pointer",
+              backgroundColor: "green",
+              borderRadius: "50%",
+              padding: "8px",
+            }}
             onClick={() => handleViewInvoice(row.original.id)}
           >
-            <FiEye />
+            <FiEye
+              style={{
+                color: "white",
+              }}
+            />
           </div>
-          <Link to={`/update-booking/${row.original.id}`}>
-            <div
-              className="avatar-text avatar-md mr-8"
-              style={{ cursor: "pointer" }}
-            >
-              <FiEdit />
-            </div>
-          </Link>
+
           <div
             className="avatar-text avatar-md mr-8"
-            style={{ cursor: "pointer", color: "red" }}
+            style={{
+              cursor: "pointer",
+              backgroundColor: "red",
+              borderRadius: "50%",
+              padding: "8px",
+            }}
+            onClick={() => handleDeleteEmployee(row.original.id)}
           >
-            <FiTrash onClick={() => handleDeleteEmployee(row.original.id)} />
+            <FiTrash style={{ color: "white" }} />
           </div>
         </div>
       ),
@@ -552,6 +592,7 @@ const InvoiceTable = () => {
       <InvoiceDetailsModal
         isOpen={isDetailsModalOpen}
         toggle={() => setIsDetailsModalOpen(false)}
+        onUpdate={handleInvoiceUpdate}
         invoice={selectedInvoice}
         footerContent={
           selectedInvoice && (

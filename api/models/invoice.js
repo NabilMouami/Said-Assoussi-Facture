@@ -5,28 +5,28 @@ const Advancement = require("./Advancement");
 
 class Invoice extends Model {
   calculateTotals() {
-    if (this.items && this.items.length > 0) {
-      this.subTotal = this.items.reduce(
-        (sum, item) => sum + parseFloat(item.totalPrice || 0),
-        0
-      );
+    const subTotal = this.items.reduce(
+      (sum, item) => sum + parseFloat(item.totalPrice),
+      0
+    );
 
-      // Calculate discount
-      let discountAmount = 0;
-      if (this.discountType === "percentage") {
-        discountAmount = (this.subTotal * this.discountValue) / 100;
-      } else {
-        discountAmount = this.discountValue;
-      }
+    const discount =
+      this.discountType === "percentage"
+        ? (subTotal * this.discountValue) / 100
+        : this.discountValue;
 
-      // Apply discount
-      const amountAfterDiscount = this.subTotal - discountAmount;
+    const total = Math.max(0, subTotal - discount);
+    const advancementTotal = this.advancements.reduce(
+      (sum, adv) => sum + parseFloat(adv.amount),
+      0
+    );
+    const remaining = Math.max(0, total - advancementTotal);
 
-      this.total = amountAfterDiscount;
-
-      // Store discount amount for easy access
-      this.discountAmount = discountAmount;
-    }
+    this.subTotal = subTotal;
+    this.total = total;
+    this.discountAmount = discount;
+    this.advancement = advancementTotal;
+    this.remainingAmount = remaining;
   }
 }
 

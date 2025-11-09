@@ -1,1 +1,1 @@
-export const config_url = `http://localhost:5000`;
+export const config_url = "https://api.alnox.online";

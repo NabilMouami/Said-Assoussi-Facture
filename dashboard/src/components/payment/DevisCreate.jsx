@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FiInfo } from "react-icons/fi";
+import { FiInfo, FiPlus } from "react-icons/fi";
 import DatePicker from "react-datepicker";
 import useDatePicker from "@/hooks/useDatePicker";
 import topTost from "@/utils/topTost";
@@ -22,41 +22,27 @@ const previtems = [
   },
 ];
 
-// Moroccan invoice status options
+// Statuts spécifiques pour un Devis
 const statusOptions = [
   { value: "brouillon", label: "Brouillon" },
-  { value: "envoyée", label: "Envoyée" },
-  { value: "payée", label: "Payée" },
-  { value: "partiellement_payée", label: "Partiellement Payée" },
-  { value: "en_retard", label: "En Retard" },
-  { value: "annulée", label: "Annulée" },
-  { value: "en_attente", label: "En Attente" },
+  { value: "envoyé", label: "Envoyé au client" },
+  { value: "en_attente", label: "En Attente de réponse" },
+  { value: "accepté", label: "Accepté par le client" },
+  { value: "refusé", label: "Refusé" },
+  { value: "expiré", label: "Expiré" },
 ];
 
-// Moroccan payment types
-const paymentTypeOptions = [
-  { value: "espece", label: "Espèce" },
-  { value: "cheque", label: "Chèque" },
-  { value: "virement", label: "Virement Bancaire" },
-  { value: "carte", label: "Carte Bancaire" },
-  { value: "multiple", label: "Paiement Multiple" },
-  { value: "non_paye", label: "Non Payé" },
-];
-
-const InvoiceCreate = () => {
+const DevisCreate = () => {
   const { startDate, setStartDate, renderFooter } = useDatePicker();
   const [items, setItems] = useState(previtems);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [invoiceNote, setInvoiceNote] = useState("");
+  const [devisNote, setDevisNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [invoiceStatus, setInvoiceStatus] = useState("brouillon");
-  const [advancementPrice, setAdvancementPrice] = useState(0);
-  const [remainingAmount, setRemainingAmount] = useState(0);
+  const [devisStatus, setDevisStatus] = useState("brouillon");
   const [discountAmount, setDiscountAmount] = useState(0);
   const [discountType, setDiscountType] = useState("fixed"); // "fixed" or "percentage"
-  const [paymentType, setPaymentType] = useState("espece");
-  const [createdInvoiceId, setCreatedInvoiceId] = useState(null);
+  const [createdDevisId, setCreatedDevisId] = useState(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
   const addItem = () => {
@@ -126,15 +112,13 @@ const InvoiceCreate = () => {
   // Final total (after discount)
   const total = Math.max(0, totalAfterDiscount).toFixed(2);
 
-  // Update remaining amount when total or advancement changes
-  React.useEffect(() => {
-    const remaining = totalAfterDiscount - advancementPrice;
-    setRemainingAmount(remaining > 0 ? remaining : 0);
-  }, [totalAfterDiscount, advancementPrice]);
-
-  const handleAdvancementChange = (e) => {
-    const value = parseFloat(e.target.value) || 0;
-    setAdvancementPrice(value);
+  // Get maximum discount value based on type
+  const getMaxDiscount = () => {
+    if (discountType === "percentage") {
+      return 100;
+    } else {
+      return subTotal;
+    }
   };
 
   const handleDiscountChange = (e) => {
@@ -146,15 +130,6 @@ const InvoiceCreate = () => {
     setDiscountType(e.target.value);
     // Reset discount amount when changing type
     setDiscountAmount(0);
-  };
-
-  // Get maximum discount value based on type
-  const getMaxDiscount = () => {
-    if (discountType === "percentage") {
-      return 100;
-    } else {
-      return subTotal;
-    }
   };
 
   // Format phone number for WhatsApp (Morocco format)
@@ -182,35 +157,32 @@ const InvoiceCreate = () => {
     return cleanPhone;
   };
 
-  // Generate WhatsApp message
-  const generateWhatsAppMessage = (invoiceNumber, customerName, invoiceId) => {
-    const pdfUrl = `${config_url}/api/invoices/${invoiceId}/pdf`;
+  // Generate WhatsApp message for Devis
+  const generateWhatsAppMessage = (devisNumber, customerName, devisId) => {
+    const pdfUrl = `${config_url}/api/devis/${devisId}/pdf`;
 
     const message = `Bonjour ${customerName || "Client"},
 
-Votre facture ${invoiceNumber} est prête !
+Votre devis ${devisNumber} est prêt !
 
-Montant total: ${total} Dh
-Statut: ${
-      statusOptions.find((opt) => opt.value === invoiceStatus)?.label ||
-      invoiceStatus
-    }
+Montant total estimé: ${total} Dh
 
-Vous pouvez télécharger votre facture PDF ici:
+Vous pouvez télécharger votre devis PDF ici:
 ${pdfUrl}
 
-Merci pour votre confiance !
+Nous restons à votre disposition pour toute question.
 
+Cordialement,
 Fer-Aluminium-Inox
 Construction Métallique`;
 
     return encodeURIComponent(message);
   };
 
-  // Send invoice to WhatsApp
+  // Send devis to WhatsApp
   const sendToWhatsApp = async () => {
-    if (!createdInvoiceId) {
-      topTost("Aucune facture créée à envoyer", "error");
+    if (!createdDevisId) {
+      topTost("Aucun devis créé à envoyer", "error");
       return;
     }
 
@@ -233,12 +205,12 @@ Construction Métallique`;
         return;
       }
 
-      // Generate WhatsApp message with the actual invoice number
-      const invoiceNumber = `FACT-${createdInvoiceId}`;
+      // Generate WhatsApp message with the actual devis number
+      const devisNumber = `DEV-${createdDevisId}`;
       const message = generateWhatsAppMessage(
-        invoiceNumber,
+        devisNumber,
         customerName,
-        createdInvoiceId
+        createdDevisId
       );
 
       // Create WhatsApp Web URL
@@ -247,7 +219,7 @@ Construction Métallique`;
       // Open WhatsApp Web in new tab
       window.open(whatsappUrl, "_blank");
 
-      topTost("WhatsApp ouvert avec votre facture!", "success");
+      topTost("WhatsApp ouvert avec votre devis!", "success");
     } catch (error) {
       console.error("Error sending to WhatsApp:", error);
       topTost("Erreur lors de l'envoi vers WhatsApp", "error");
@@ -260,14 +232,11 @@ Construction Métallique`;
     setItems(previtems);
     setCustomerName("");
     setCustomerPhone("");
-    setInvoiceNote("");
-    setInvoiceStatus("brouillon");
-    setAdvancementPrice(0);
-    setRemainingAmount(0);
+    setDevisNote("");
+    setDevisStatus("brouillon");
     setDiscountAmount(0);
     setDiscountType("fixed");
-    setPaymentType("espece");
-    setCreatedInvoiceId(null);
+    setCreatedDevisId(null);
   };
 
   const handleSubmit = async () => {
@@ -279,20 +248,13 @@ Construction Métallique`;
 
     // ✅ Validate customer phone if status requires it
     if (
-      (invoiceStatus === "envoyée" ||
-        invoiceStatus === "partiellement_payée") &&
+      (devisStatus === "envoyé" || devisStatus === "en_attente") &&
       !customerPhone.trim()
     ) {
       topTost(
-        "Le numéro de téléphone est requis pour envoyer la facture",
+        "Le numéro de téléphone est requis pour envoyer le devis",
         "error"
       );
-      return;
-    }
-
-    // ✅ Validate advancement doesn't exceed total
-    if (advancementPrice > totalAfterDiscount) {
-      topTost("L'acompte ne peut pas dépasser le montant total", "error");
       return;
     }
 
@@ -309,24 +271,17 @@ Construction Métallique`;
       const calculatedSubTotal = subTotal;
       const calculatedDiscount = discount;
       const calculatedTotal = calculatedSubTotal - calculatedDiscount;
-      const calculatedRemaining = Math.max(
-        0,
-        calculatedTotal - advancementPrice
-      );
 
-      // Prepare invoice data - match backend expectations
-      const invoiceData = {
+      // Prepare devis data - match backend expectations
+      const devisData = {
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
         issueDate: startDate,
-        notes: invoiceNote,
-        status: invoiceStatus,
-        advancement: parseFloat(advancementPrice),
-        remainingAmount: parseFloat(calculatedRemaining),
+        notes: devisNote,
+        status: devisStatus,
         discountAmount: parseFloat(calculatedDiscount),
         discountType: discountType,
         discountValue: parseFloat(discountAmount), // Add this line
-        paymentType: paymentType,
         items: items.map((item) => ({
           articleName: item.product,
           quantity: parseFloat(item.qty),
@@ -338,40 +293,36 @@ Construction Métallique`;
         })),
         subTotal: parseFloat(calculatedSubTotal),
         total: parseFloat(calculatedTotal),
+        type: "devis", // Important pour le backend
       };
 
-      console.log("Sending invoice data:", invoiceData);
+      console.log("Sending devis data:", devisData);
       console.log("Calculations:", {
         subTotal: calculatedSubTotal,
         discount: calculatedDiscount,
         total: calculatedTotal,
-        advancement: advancementPrice,
-        remaining: calculatedRemaining,
       });
 
       // Send to backend
-      const response = await axios.post(
-        `${config_url}/api/invoices`,
-        invoiceData
-      );
+      const response = await axios.post(`${config_url}/api/devis`, devisData);
 
       // Show success message
-      topTost("Facture créée avec succès!", "success");
+      topTost("Devis créé avec succès!", "success");
 
-      // Store the created invoice ID for WhatsApp sharing
-      if (response.data.invoice && response.data.invoice.id) {
-        setCreatedInvoiceId(response.data.invoice.id);
+      // Store the created devis ID for WhatsApp sharing
+      if (response.data.devis && response.data.devis.id) {
+        setCreatedDevisId(response.data.devis.id);
       } else {
-        console.error("No invoice ID in response:", response.data);
-        topTost("Facture créée mais ID non reçu", "warning");
+        console.error("No devis ID in response:", response.data);
+        topTost("Devis créé mais ID non reçu", "warning");
       }
     } catch (error) {
-      console.error("Error creating invoice:", error);
+      console.error("Error creating devis:", error);
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.errors?.[0]?.message ||
         error.response?.data?.error ||
-        "Erreur lors de la création de la facture. Veuillez réessayer.";
+        "Erreur lors de la création du devis. Veuillez réessayer.";
       topTost(errorMessage, "error");
     } finally {
       setIsSubmitting(false);
@@ -383,7 +334,7 @@ Construction Métallique`;
       <div className="col-xl-12">
         <div className="card invoice-container">
           <div className="card-header">
-            <h5>Creer Facture- Fer-Aluminium-Inox</h5>
+            <h5>Créer Devis - Fer-Aluminium-Inox</h5>
           </div>
           <div className="card-body p-0">
             <div className="px-4 pt-4">
@@ -392,7 +343,7 @@ Construction Métallique`;
                   <div className="form-group mb-3 mb-md-0">
                     <label className="form-label fw-medium">
                       <FaCalendarAlt className="me-2" />
-                      Date Facturation:
+                      Date Devis:
                     </label>
                     <div className="input-group date">
                       <span className="input-group-text bg-light">
@@ -419,7 +370,7 @@ Construction Métallique`;
 
               {/* Customer Information */}
               <div className="row mt-4">
-                <div className="col-md-6">
+                <div className="col-md-4">
                   <div className="form-group">
                     <label htmlFor="customerName" className="form-label">
                       Nom Client: *
@@ -428,20 +379,21 @@ Construction Métallique`;
                       type="text"
                       className="form-control"
                       id="customerName"
-                      placeholder="Entrez Le Nom De Client"
+                      placeholder="Entrez Le Nom Du Client"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       required
                     />
                   </div>
                 </div>
-                <div className="col-md-6">
+
+                <div className="col-md-4">
                   <div className="form-group">
                     <label htmlFor="customerPhone" className="form-label">
                       Téléphone Client: *
-                      {["envoyée", "partiellement_payée"].includes(
-                        invoiceStatus
-                      ) && <span className="text-danger"> (Requis)</span>}
+                      {["envoyé", "en_attente"].includes(devisStatus) && (
+                        <span className="text-danger"> (Requis)</span>
+                      )}
                     </label>
                     <input
                       type="tel"
@@ -450,76 +402,12 @@ Construction Métallique`;
                       placeholder="06 XX XX XX XX ou +212 6 XX XX XX XX"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
-                      required={["envoyée", "partiellement_payée"].includes(
-                        invoiceStatus
-                      )}
+                      required={["envoyé", "en_attente"].includes(devisStatus)}
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* Status, Payment Type, and Advancement */}
-              <div className="row mt-3">
-                <div className="col-md-3">
-                  <div className="form-group">
-                    <label htmlFor="invoiceStatus" className="form-label">
-                      Statut de la Facture:
-                    </label>
-                    <select
-                      className="form-control"
-                      id="invoiceStatus"
-                      value={invoiceStatus}
-                      onChange={(e) => setInvoiceStatus(e.target.value)}
-                    >
-                      {statusOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="col-md-3">
-                  <div className="form-group">
-                    <label htmlFor="paymentType" className="form-label">
-                      Type de Paiement:
-                    </label>
-                    <select
-                      className="form-control"
-                      id="paymentType"
-                      value={paymentType}
-                      onChange={(e) => setPaymentType(e.target.value)}
-                    >
-                      {paymentTypeOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="col-md-3">
-                  <div className="form-group">
-                    <label htmlFor="advancementPrice" className="form-label">
-                      Avancement (Dh):
-                    </label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      id="advancementPrice"
-                      placeholder="0.00"
-                      step="0.01"
-                      min="0"
-                      max={totalAfterDiscount}
-                      value={advancementPrice}
-                      onChange={handleAdvancementChange}
-                    />
-                    <small className="text-muted">
-                      Maximum: {totalAfterDiscount.toFixed(2)} Dh
-                    </small>
-                  </div>
-                </div>
-                <div className="col-md-3">
+                <div className="col-md-4">
                   <div className="form-group">
                     <label htmlFor="discountType" className="form-label">
                       Type de Remise:
@@ -537,9 +425,29 @@ Construction Métallique`;
                 </div>
               </div>
 
-              {/* Discount Input Section */}
+              {/* Status and Discount Input Section */}
               <div className="row mt-3">
-                <div className="col-md-6">
+                <div className="col-md-4">
+                  <div className="form-group">
+                    <label htmlFor="devisStatus" className="form-label">
+                      Statut du Devis:
+                    </label>
+                    <select
+                      className="form-control"
+                      id="devisStatus"
+                      value={devisStatus}
+                      onChange={(e) => setDevisStatus(e.target.value)}
+                    >
+                      {statusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="col-md-4">
                   <div className="form-group">
                     <label htmlFor="discountAmount" className="form-label">
                       {discountType === "percentage"
@@ -565,7 +473,8 @@ Construction Métallique`;
                     </small>
                   </div>
                 </div>
-                <div className="col-md-6">
+
+                <div className="col-md-4">
                   <div className="form-group">
                     <label className="form-label">Valeur de la Remise:</label>
                     <div className="p-2 bg-light rounded">
@@ -590,17 +499,17 @@ Construction Métallique`;
               <div className="mb-4 d-flex align-items-center justify-content-between">
                 <div>
                   <h6 className="fw-bold">
-                    Ajouter des éléments de construction en métal :
+                    Détail des éléments de construction :
                   </h6>
                   <span className="fs-12 text-muted">
-                    Ajouter des éléments avec des dimensions à la facture{" "}
+                    Ajouter les éléments avec leurs dimensions au devis
                   </span>
                 </div>
                 <div
                   className="avatar-text avatar-sm"
                   data-bs-toggle="tooltip"
                   data-bs-trigger="hover"
-                  title="Total = Qty × Longueur × Largeur × Hauteur × Unit Price"
+                  title="Total = Qty × Longueur × Largeur × Hauteur × Prix Unitaire"
                 >
                   <FiInfo />
                 </div>
@@ -618,8 +527,8 @@ Construction Métallique`;
                       <th className="text-center wd-100">Longueur (V1)</th>
                       <th className="text-center wd-100">Largeur (V2)</th>
                       <th className="text-center wd-100">Hauteur (V3)</th>
-                      <th className="text-center wd-100">Price/Unit Vol.</th>
-                      <th className="text-center wd-150">Total Price</th>
+                      <th className="text-center wd-100">Prix/Unité Vol.</th>
+                      <th className="text-center wd-150">Prix Total</th>
                       <th className="text-center wd-100">Action</th>
                     </tr>
                   </thead>
@@ -632,7 +541,7 @@ Construction Métallique`;
                             <input
                               type="text"
                               name="product"
-                              placeholder="Article Name"
+                              placeholder="Nom de l'article"
                               className="form-control"
                               value={item.product}
                               onChange={(e) =>
@@ -708,7 +617,7 @@ Construction Métallique`;
                             <input
                               type="number"
                               name="price_unit"
-                              placeholder="Price/Unit"
+                              placeholder="Prix/Unité"
                               className="form-control price"
                               step="0.01"
                               min="0.01"
@@ -767,6 +676,7 @@ Construction Métallique`;
                     <label className="form-label">Client:</label>
                     <p className="fw-bold">{customerName || "Non spécifié"}</p>
                   </div>
+
                   <div className="form-group">
                     <label className="form-label">Téléphone:</label>
                     <p className="fw-bold">{customerPhone || "Non spécifié"}</p>
@@ -774,16 +684,8 @@ Construction Métallique`;
                   <div className="form-group">
                     <label className="form-label">Statut:</label>
                     <p className="fw-bold">
-                      {statusOptions.find((opt) => opt.value === invoiceStatus)
+                      {statusOptions.find((opt) => opt.value === devisStatus)
                         ?.label || "Brouillon"}
-                    </p>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Type de Paiement:</label>
-                    <p className="fw-bold">
-                      {paymentTypeOptions.find(
-                        (opt) => opt.value === paymentType
-                      )?.label || "Non spécifié"}
                     </p>
                   </div>
                 </div>
@@ -792,11 +694,7 @@ Construction Métallique`;
                     <div className="col-auto">
                       <p className="mb-1">Sous-total:</p>
                       <p className="mb-1 text-danger">Remise:</p>
-                      <p className="mb-1 fw-bold">Total après remise:</p>
-                      <p className="mb-1">Avancement:</p>
-                      <p className="mb-1 fw-bold border-top pt-1">
-                        Reste à payer:
-                      </p>
+                      <p className="mb-1 fw-bold">Total estimé:</p>
                     </div>
                     <div className="col-auto text-end">
                       <p className="mb-1">{subTotal.toFixed(2)} Dh</p>
@@ -805,10 +703,6 @@ Construction Métallique`;
                       </p>
                       <p className="mb-1 fw-bold">
                         {totalAfterDiscount.toFixed(2)} Dh
-                      </p>
-                      <p className="mb-1">{advancementPrice.toFixed(2)} Dh</p>
-                      <p className="mb-1 fw-bold border-top pt-1">
-                        {remainingAmount.toFixed(2)} Dh
                       </p>
                     </div>
                   </div>
@@ -819,21 +713,21 @@ Construction Métallique`;
             <hr className="border-dashed" />
             <div className="px-4 pb-4">
               <div className="form-group">
-                <label htmlFor="InvoiceNote" className="form-label">
-                  Description De Facture:
+                <label htmlFor="DevisNote" className="form-label">
+                  Description du Devis:
                 </label>
                 <textarea
                   rows={6}
                   className="form-control"
-                  id="InvoiceNote"
-                  placeholder="It was a pleasure working with you and your team. We hope you will keep us in mind for future metal construction projects. Thank You!"
-                  value={invoiceNote}
-                  onChange={(e) => setInvoiceNote(e.target.value)}
+                  id="DevisNote"
+                  placeholder="Ce devis détaille les prestations pour votre projet de construction métallique. Nous restons à votre disposition pour toute modification ou précision. Validité: 30 jours."
+                  value={devisNote}
+                  onChange={(e) => setDevisNote(e.target.value)}
                 />
               </div>
 
               <div className="d-flex justify-content-end gap-3 mt-4">
-                {createdInvoiceId && (
+                {createdDevisId && (
                   <>
                     <button
                       className="btn btn-success"
@@ -845,7 +739,7 @@ Construction Métallique`;
                         : "📱 Envoyer via WhatsApp"}
                     </button>
                     <button className="btn btn-secondary" onClick={resetForm}>
-                      Nouvelle Facture
+                      Nouveau Devis
                     </button>
                   </>
                 )}
@@ -854,7 +748,7 @@ Construction Métallique`;
                   onClick={handleSubmit}
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? "Création de la facture..." : "Créer Facture"}
+                  {isSubmitting ? "Création du devis..." : "Créer Devis"}
                 </button>
               </div>
             </div>
@@ -865,4 +759,4 @@ Construction Métallique`;
   );
 };
 
-export default InvoiceCreate;
+export default DevisCreate;

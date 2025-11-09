@@ -6,7 +6,8 @@ const db = require("./models");
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
 const invoiceRoutes = require("./routes/invoice");
-const seedAdmin = require("./utils/seedAdmin");
+const devisRoutes = require("./routes/devis");
+const analyticsRoutes = require("./routes/analytics");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,6 +24,7 @@ const corsOptions = {
       "http://localhost:3000", // Create React App
       "http://127.0.0.1:5173",
       "http://127.0.0.1:3000",
+      "https://admin.alnox.online",
     ];
 
     // Add production domains if defined
@@ -62,6 +64,8 @@ app.use((req, res, next) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/invoices", invoiceRoutes);
+app.use("/api/devis", devisRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 // Health check
 app.get("/", (req, res) => res.json({ message: "API running" }));
@@ -95,12 +99,9 @@ app.use((req, res) => {
     await db.sequelize.authenticate();
     console.log("DB connected");
 
-    // Sync database
-    await db.sequelize.sync({ alter: true });
-    console.log("DB synced");
-
-    // Seed admin user
-    await seedAdmin();
+    // Sync database without alter to avoid index issues
+    await db.sequelize.sync();
+    console.log("Database models synchronized");
 
     // Start server
     app.listen(PORT, () => {

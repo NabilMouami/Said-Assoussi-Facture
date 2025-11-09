@@ -13,8 +13,6 @@ import { useParams } from "react-router-dom";
 import { config_url } from "@/utils/config";
 import axios from "axios";
 import PageHeader from "@/components/shared/pageHeader/PageHeader";
-import ServicesListHeader from "@/components/servicesList/ServicesListHeader";
-
 function UpdateUser() {
   const { id } = useParams(); // URL param: /users/:id
 
@@ -98,9 +96,6 @@ function UpdateUser() {
 
   return (
     <>
-      <PageHeader>
-        <ServicesListHeader />
-      </PageHeader>
       <Container className="mt-5" style={{ maxWidth: "600px" }}>
         <h2 className="mb-4">Update Profile</h2>
 

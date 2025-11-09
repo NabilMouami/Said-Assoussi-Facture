@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import PageHeader from "@/components/shared/pageHeader/PageHeader";
-import ServicesListHeader from "@/components/servicesList/ServicesListHeader";
 import { FiSave } from "react-icons/fi";
 import topTost from "@/utils/topTost";
 import axios from "axios";
@@ -13,10 +12,9 @@ const MySwal = withReactContent(Swal);
 
 function UsersCreate() {
   const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState("admin");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,14 +23,18 @@ function UsersCreate() {
       const formData = new FormData();
       formData.append("email", email);
       formData.append("password", password);
-      formData.append("firstName", firstName);
-      formData.append("lastName", lastName);
+      formData.append("name", firstName);
+      formData.append("role", role);
 
-      const response = await axios.post(`${config_url}/api/users`, formData, {
-        withCredentials: true,
+      const response = await axios.post(
+        `${config_url}/api/auth/register`,
+        formData,
+        {
+          withCredentials: true,
 
-        headers: { "Content-Type": "application/json" },
-      });
+          headers: { "Content-Type": "application/json" },
+        }
+      );
 
       MySwal.fire({
         title: "Success!",
@@ -41,7 +43,6 @@ function UsersCreate() {
         confirmButtonText: "OK",
       }).then(() => {
         setFirstName("");
-        setLastName("");
         setEmail("");
         setPassword("");
       });
@@ -53,10 +54,6 @@ function UsersCreate() {
 
   return (
     <>
-      <PageHeader>
-        <ServicesListHeader />
-      </PageHeader>
-
       <div className="main-content">
         <div className="row">
           <form className="col-xl-9" onSubmit={handleSubmit}>
@@ -64,27 +61,14 @@ function UsersCreate() {
               <div className="card-body">
                 <div className="mb-4">
                   <label className="form-label">
-                    FirstName User <span className="text-danger">*</span>
+                    Nom Utilisateur <span className="text-danger">*</span>
                   </label>
                   <input
                     type="text"
                     className="form-control"
-                    placeholder=" FirstName User Dashboard"
+                    placeholder="Nom User Dashboard"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="mb-4">
-                  <label className="form-label">
-                    lastName User <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder=" LastName User Dashboard"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
                     required
                   />
                 </div>
@@ -125,7 +109,7 @@ function UsersCreate() {
                   >
                     <option value="">Select Role</option>
                     <option value="admin">Admin</option>
-                    <option value="super-admin">Super-Admin</option>
+                    <option value="user">User</option>
                   </Input>
                 </FormGroup>
                 <button type="submit" className="w-25 btn btn-primary m-4">

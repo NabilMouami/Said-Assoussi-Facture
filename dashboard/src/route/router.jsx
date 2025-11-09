@@ -11,8 +11,10 @@ import Proposalist from "../pages/proposal-list";
 import ProposalView from "../pages/proposal-view";
 import ProposalEdit from "../pages/proposal-edit";
 import LeadsList from "../pages/leadsList";
-import CustomersView from "../pages/customers-view";
-import CustomersCreate from "../pages/customers-create";
+import UsersList from "../pages/Users/users-list";
+import UsersCreate from "../pages/Users/users-create";
+import UpdateUser from "../pages/Users/update-user";
+
 import ProposalCreate from "../pages/proposal-create";
 import LeadsView from "../pages/leads-view";
 import LeadsCreate from "../pages/leads-create";
@@ -30,6 +32,8 @@ import RequireAuth from "@/components/authentication/RequireAuth";
 
 import { Navigate } from "react-router-dom";
 import InvoicesList from "../pages/Invoices/invoices-list";
+import DevisCreate from "@/components/payment/DevisCreate";
+import DevisList from "../pages/Devis/devis-list";
 
 export const router = createBrowserRouter([
   {
@@ -91,6 +95,18 @@ export const router = createBrowserRouter([
         element: <ProposalCreate />,
       },
       {
+        path: "users",
+        element: <UsersList />,
+      },
+      {
+        path: "users/create",
+        element: <UsersCreate />,
+      },
+      {
+        path: "users/update/:id",
+        element: <UpdateUser />,
+      },
+      {
         path: "payment/list",
         element: <PaymentList />,
       },
@@ -101,6 +117,14 @@ export const router = createBrowserRouter([
       {
         path: "facture/create",
         element: <PaymentCreate />,
+      },
+      {
+        path: "devis/create",
+        element: <DevisCreate />,
+      },
+      {
+        path: "devis/list",
+        element: <DevisList />,
       },
       {
         path: "invoices/list",

@@ -18,11 +18,119 @@ const register = async (req, res) => {
       name,
       email,
       password: hash,
-      role: role === "admin" ? "admin" : "user",
+      role: role,
     });
     return res.status(201).json({
       message: "User created",
       user: { id: user.id, email: user.email, role: user.role },
+    });
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
+  }
+};
+const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUser = req.user;
+
+    // Authorization: Users can view themselves OR admins can view anyone
+    if (currentUser.id !== parseInt(id) && currentUser.role !== "admin") {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to view this user" });
+    }
+
+    const user = await User.findByPk(id, {
+      attributes: { exclude: ["password"] }, // Don't send password
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// Update user by ID
+const updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, password, role } = req.body;
+    const currentUser = req.user;
+
+    // Check if user exists
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Authorization: Users can update themselves OR admins can update anyone
+    if (currentUser.id !== parseInt(id) && currentUser.role !== "admin") {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to update this user" });
+    }
+
+    // Check if email is being changed and if it's already in use
+    if (email && email !== user.email) {
+      const existingUser = await User.findOne({ where: { email } });
+      if (existingUser && existingUser.id !== parseInt(id)) {
+        return res.status(409).json({ message: "Email already in use" });
+      }
+    }
+
+    // Prevent role escalation: non-admins cannot change roles
+    if (role && currentUser.role !== "admin" && role !== user.role) {
+      return res.status(403).json({
+        message: "Not authorized to change user role",
+      });
+    }
+
+    // Prevent last admin from being demoted
+    if (role && user.role === "admin" && role !== "admin") {
+      const adminCount = await User.count({ where: { role: "admin" } });
+      if (adminCount <= 1) {
+        return res.status(400).json({
+          message:
+            "Cannot demote the last admin user. Please assign another admin first.",
+        });
+      }
+    }
+
+    // Prepare update data
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
+    if (role && currentUser.role === "admin") updateData.role = role;
+
+    // Hash new password if provided
+    if (password && password.trim() !== "") {
+      if (password.length < 6) {
+        return res.status(400).json({
+          message: "Password must be at least 6 characters long",
+        });
+      }
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    // Update user
+    await User.update(updateData, { where: { id } });
+
+    // Fetch updated user
+    const updatedUser = await User.findByPk(id, {
+      attributes: { exclude: ["password"] },
+    });
+
+    return res.json({
+      message: "User updated successfully",
+      user: updatedUser,
     });
   } catch (err) {
     console.error(err);
@@ -84,4 +192,51 @@ const getMe = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getMe };
+// Delete user by ID (Admin only or self-delete)
+const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUser = req.user;
+
+    // Check if user exists
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Authorization: Users can delete themselves OR admins can delete anyone
+    if (currentUser.id !== parseInt(id) && currentUser.role !== "admin") {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to delete this user" });
+    }
+
+    // Optional: Prevent self-deletion if it's the last admin
+    if (user.role === "admin" && currentUser.id === parseInt(id)) {
+      const adminCount = await User.count({ where: { role: "admin" } });
+      if (adminCount <= 1) {
+        return res.status(400).json({
+          message:
+            "Cannot delete the last admin user. Please assign another admin first.",
+        });
+      }
+    }
+
+    await User.destroy({ where: { id } });
+
+    return res.json({ message: "User deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    return res
+      .status(500)
+      .json({ message: "Server error", error: err.message });
+  }
+};
+module.exports = {
+  register,
+  login,
+  getMe,
+  deleteUser,
+  updateUser,
+  getUserById,
+};

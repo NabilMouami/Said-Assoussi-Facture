@@ -16,22 +16,6 @@ import ThemeCustomizer from "./components/shared/ThemeCustomizer";
 import axiosInstance from "./utils/axiosConfig"; // Import the axios instance
 
 const App = () => {
-  const dispatch = useDispatch();
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await axiosInstance.get("/api/auth/me");
-        dispatch(detailsUser(res.data.user));
-      } catch (err) {
-        localStorage.removeItem("token"); // Clear invalid token
-        dispatch(detailsUser(null));
-      }
-    };
-
-    checkAuth();
-  }, [dispatch]);
-
   return (
     <>
       <NavigationProvider>

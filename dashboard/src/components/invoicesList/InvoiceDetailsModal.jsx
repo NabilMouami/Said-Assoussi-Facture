@@ -20,7 +20,8 @@ import DatePicker from "react-datepicker";
 import axios from "axios";
 import { config_url } from "@/utils/config";
 import topTost from "@/utils/topTost";
-
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 // Moroccan invoice status options
 const statusOptions = [
   { value: "brouillon", label: "Brouillon" },
@@ -29,9 +30,7 @@ const statusOptions = [
   { value: "partiellement_payée", label: "Partiellement Payée" },
   { value: "en_retard", label: "En Retard" },
   { value: "annulée", label: "Annulée" },
-  { value: "en_litige", label: "En Litige" },
   { value: "en_attente", label: "En Attente" },
-  { value: "acompte_reçu", label: "Acompte Reçu" },
 ];
 
 // Moroccan payment types
@@ -240,10 +239,22 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
       return;
     }
 
-    // Validate items
+    // Validate items - at least one item required
     if (!formData.items || formData.items.length === 0) {
       topTost("La facture doit avoir au moins un article", "error");
       return;
+    }
+
+    // Validate each item has required fields
+    for (const item of formData.items) {
+      if (!item.articleName.trim()) {
+        topTost("Tous les articles doivent avoir un nom", "error");
+        return;
+      }
+      if (item.quantity <= 0 || item.unitPrice <= 0) {
+        topTost("Quantité et prix unitaire doivent être positifs", "error");
+        return;
+      }
     }
 
     // Validate advancements don't exceed total
@@ -312,7 +323,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
       topTost("Facture mise à jour avec succès!", "success");
 
       if (onUpdate) {
-        onUpdate(response.data.invoice);
+        onUpdate(response.data.invoice || response.data);
       }
 
       toggle();
@@ -330,6 +341,512 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
     }
   };
 
+  const removeItem = (index) => {
+    // Create a new array without the item at the specified index
+    const updatedItems = formData.items.filter((_, i) => i !== index);
+
+    // Update the form data with the new items array
+    setFormData((prev) => ({
+      ...prev,
+      items: updatedItems,
+    }));
+  };
+
+  const handlePrint = () => {
+    if (!invoice) return;
+
+    const formatDate = (dateStr) => {
+      if (!dateStr) return "";
+      const d = new Date(dateStr);
+      return d.toLocaleDateString("fr-FR");
+    };
+
+    // Use formData instead of invoice to get current values
+    const subTotal = formData.items.reduce(
+      (sum, item) =>
+        sum + item.quantity * item.v1 * item.v2 * item.v3 * item.unitPrice,
+      0
+    );
+
+    const calculateDiscount = () => {
+      if (formData.discountType === "percentage") {
+        return (subTotal * formData.discountValue) / 100;
+      } else {
+        return formData.discountValue;
+      }
+    };
+
+    const discount = calculateDiscount();
+    const totalAfterDiscount = Math.max(0, subTotal - discount);
+
+    // Calculate total advancement from current formData advancements
+    const totalAdvancement = formData.advancements.reduce(
+      (sum, adv) => sum + parseFloat(adv.amount || 0),
+      0
+    );
+
+    const remainingAmount = Math.max(0, totalAfterDiscount - totalAdvancement);
+
+    const printWindow = window.open("", "_blank");
+    const printContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Facture ${invoice.invoiceNumber}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 10px;
+      margin: 20px;
+      color: #333;
+    }
+    .header {
+      text-align: center;
+      border-bottom: 2px solid #333;
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+    .company-info, .invoice-info {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .info-block {
+      flex: 1;
+      min-width: 220px;
+    }
+    .info-block p {
+      margin: 3px 0;
+    }
+  .table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 15px 0;
+  table-layout: fixed;
+}
+.table th, .table td {
+  border: 1px solid #ddd;
+  padding: 6px;
+  text-align: left;
+  word-wrap: break-word;
+  white-space: normal;
+  vertical-align: top;
+}
+.table th {
+  background-color: #f5f5f5;
+}
+.table td:first-child {
+  width: 30%;
+}
+
+    .totals {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      margin-top: 20px;
+    }
+    .totals p {
+      margin: 2px 0;
+    }
+    .advancements {
+      margin-top: 25px;
+    }
+    .advancements h3 {
+      margin-bottom: 5px;
+      font-size: 12px;
+    }
+    .notes {
+      margin-top: 20px;
+    }
+    .footer {
+      margin-top: 40px;
+      border-top: 1px solid #333;
+      padding-top: 15px;
+      text-align: center;
+    }
+    @media print {
+      body { margin: 0; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2 style="margin: 0;">Facture</h2>
+  </div>
+
+  <div class="company-info">
+    <div class="info-block">
+      <p>Assoussi</p>
+
+      <p><strong>Fer-Aluminium-Inox</strong></p>
+
+      <p>Tél: +212 661-431237</p>
+    </div>
+    <div class="info-block" style="text-align:right;">
+      <p><strong>Facture N°:</strong> ${invoice.invoiceNumber}</p>
+      <p><strong>Date:</strong> ${formatDate(formData.issueDate)}</p>
+    </div>
+  </div>
+
+  <div class="invoice-info">
+    <div class="info-block">
+      <p><strong>Client:</strong> ${formData.customerName}</p>
+      <p><strong>Téléphone:</strong> ${
+        formData.customerPhone || "Non spécifié"
+      }</p>
+    </div>
+ 
+  </div>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Article</th>
+        <th>Qté</th>
+        <th>Long.</th>
+        <th>Larg.</th>
+        <th>Haut.</th>
+        <th>Prix U.</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${formData.items
+        .map(
+          (item) => `
+        <tr>
+          <td>${item.articleName}</td>
+          <td>${parseFloat(item.quantity).toFixed(2)}</td>
+          <td>${parseFloat(item.v1).toFixed(2)}</td>
+          <td>${parseFloat(item.v2).toFixed(2)}</td>
+          <td>${parseFloat(item.v3).toFixed(2)}</td>
+          <td>${parseFloat(item.unitPrice).toFixed(2)} Dh</td>
+          <td>${parseFloat(item.totalPrice).toFixed(2)} Dh</td>
+        </tr>
+      `
+        )
+        .join("")}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <p><strong>Sous-total:</strong> ${subTotal.toFixed(2)} Dh</p>
+    ${
+      discount > 0
+        ? `<p><strong>Remise:</strong> -${discount.toFixed(2)} Dh</p>`
+        : ""
+    }
+    <p><strong>Total:</strong> ${totalAfterDiscount.toFixed(2)} Dh</p>
+    ${
+      totalAdvancement > 0
+        ? `<p><strong>Avancement:</strong> -${totalAdvancement.toFixed(
+            2
+          )} Dh</p>
+           <p><strong>Reste à payer:</strong> ${remainingAmount.toFixed(
+             2
+           )} Dh</p>`
+        : `<p><strong>Reste à payer:</strong> ${remainingAmount.toFixed(
+            2
+          )} Dh</p>`
+    }
+  </div>
+
+  ${
+    formData.advancements && formData.advancements.length > 0
+      ? `
+    <div class="advancements">
+      <h3>Historique des Avancements</h3>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date Paiement</th>
+            <th>Montant</th>
+            <th>Méthode</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${formData.advancements
+            .map(
+              (a) => `
+            <tr>
+              <td>${formatDate(a.paymentDate)}</td>
+              <td>${parseFloat(a.amount).toFixed(2)} Dh</td>
+              <td>${a.paymentMethod}</td>
+              <td>${a.notes || "-"}</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `
+      : ""
+  }
+
+  <div class="footer">
+    <p>Signature et cachet</p>
+    <p>_________________________</p>
+  </div>
+</body>
+</html>
+`;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.focus();
+
+    setTimeout(() => {
+      printWindow.print();
+    }, 500);
+  };
+
+  // Add this function to generate and download PDF
+  const generateAndDownloadPDF = async () => {
+    try {
+      // Create a temporary container for the PDF content
+      const pdfContainer = document.createElement("div");
+      pdfContainer.id = "pdf-container";
+      pdfContainer.style.width = "210mm"; // A4 width
+      pdfContainer.style.minHeight = "297mm";
+      pdfContainer.style.padding = "15mm 20mm";
+      pdfContainer.style.background = "white";
+      pdfContainer.style.color = "#000";
+      pdfContainer.style.fontFamily = "Arial, sans-serif";
+      pdfContainer.style.fontSize = "11px";
+      pdfContainer.style.lineHeight = "1.5";
+      pdfContainer.style.position = "absolute";
+      pdfContainer.style.left = "-9999px";
+      pdfContainer.style.top = "0";
+
+      // Format date helper
+      const formatDate = (date) => {
+        if (!date) return "";
+        return new Date(date).toLocaleDateString("fr-FR");
+      };
+
+      // Calculate totals (same as in handlePrint)
+      const subTotal = formData.items.reduce(
+        (sum, item) =>
+          sum + item.quantity * item.v1 * item.v2 * item.v3 * item.unitPrice,
+        0
+      );
+
+      const calculateDiscount = () => {
+        if (formData.discountType === "percentage") {
+          return (subTotal * formData.discountValue) / 100;
+        } else {
+          return formData.discountValue;
+        }
+      };
+
+      const discount = calculateDiscount();
+      const totalAfterDiscount = Math.max(0, subTotal - discount);
+
+      // Calculate total advancement from current formData advancements
+      const totalAdvancement = formData.advancements.reduce(
+        (sum, adv) => sum + parseFloat(adv.amount || 0),
+        0
+      );
+
+      const remainingAmount = Math.max(
+        0,
+        totalAfterDiscount - totalAdvancement
+      );
+
+      // Build PDF HTML with advancements history
+      pdfContainer.innerHTML = `
+      <div style="text-align:center; border-bottom:2px solid #333; padding-bottom:10px; margin-bottom:15px;">
+        <h1 style="margin:0; color:#2c5aa0;">FACTURE</h1>
+        <h3 style="margin:5px 0;">Fer-Aluminium-Inox - Assoussi</h3>
+        <p style="font-size:10px;">Tél: +212 661-431237  </p>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+        <div>
+          <h4 style="margin-bottom:5px;">Client</h4>
+          <p><strong>Nom:</strong> ${formData.customerName}</p>
+          <p><strong>Téléphone:</strong> ${
+            formData.customerPhone || "Non spécifié"
+          }</p>
+        </div>
+        <div>
+          <h4 style="margin-bottom:5px;">Facture</h4>
+          <p><strong>N°:</strong> ${invoice.invoiceNumber}</p>
+          <p><strong>Date:</strong> ${formatDate(formData.issueDate)}</p>
+          <p><strong>Statut:</strong> ${
+            statusOptions.find((opt) => opt.value === formData.status)?.label ||
+            formData.status
+          }</p>
+        </div>
+      </div>
+
+      <table style="width:100%; border-collapse:collapse; font-size:10px; margin-bottom:15px;">
+        <thead>
+          <tr style="background-color:#2c5aa0; color:#fff;">
+            <th style="padding:6px; border:1px solid #2c5aa0;">Article</th>
+            <th style="padding:6px; border:1px solid #2c5aa0;">Qty</th>
+            <th style="padding:6px; border:1px solid #2c5aa0;">L</th>
+            <th style="padding:6px; border:1px solid #2c5aa0;">l</th>
+            <th style="padding:6px; border:1px solid #2c5aa0;">H</th>
+            <th style="padding:6px; border:1px solid #2c5aa0;">P.U</th>
+            <th style="padding:6px; border:1px solid #2c5aa0;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${formData.items
+            .map(
+              (item, i) => `
+              <tr style="${i % 2 === 0 ? "background:#f9f9f9;" : ""}">
+                <td style="border:1px solid #ddd; padding:5px;">${
+                  item.articleName
+                }</td>
+                <td style="border:1px solid #ddd; text-align:center;">${
+                  item.quantity
+                }</td>
+                <td style="border:1px solid #ddd; text-align:center;">${
+                  item.v1
+                }</td>
+                <td style="border:1px solid #ddd; text-align:center;">${
+                  item.v2
+                }</td>
+                <td style="border:1px solid #ddd; text-align:center;">${
+                  item.v3
+                }</td>
+                <td style="border:1px solid #ddd; text-align:right;">${item.unitPrice.toFixed(
+                  2
+                )} Dh</td>
+                <td style="border:1px solid #ddd; text-align:right;">${item.totalPrice.toFixed(
+                  2
+                )} Dh</td>
+              </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
+
+      <div style="text-align:right; margin-top:20px;">
+        <p><strong>Sous-total:</strong> ${subTotal.toFixed(2)} Dh</p>
+        ${
+          discount > 0
+            ? `<p><strong>Remise:</strong> -${discount.toFixed(2)} Dh</p>`
+            : ""
+        }
+        <p><strong>Total après remise:</strong> ${totalAfterDiscount.toFixed(
+          2
+        )} Dh</p>
+        ${
+          totalAdvancement > 0
+            ? `<p><strong>Avancement:</strong> -${totalAdvancement.toFixed(
+                2
+              )} Dh</p>
+               <p style="font-size:13px; font-weight:bold; color:#2c5aa0; border-top:2px solid #2c5aa0; padding-top:5px;">
+                 Reste à payer: ${remainingAmount.toFixed(2)} Dh
+               </p>`
+            : `<p style="font-size:13px; font-weight:bold; color:#2c5aa0; border-top:2px solid #2c5aa0; padding-top:5px;">
+                 Reste à payer: ${remainingAmount.toFixed(2)} Dh
+               </p>`
+        }
+      </div>
+
+      ${
+        formData.advancements && formData.advancements.length > 0
+          ? `
+        <div style="margin-top:25px;">
+          <h4 style="margin-bottom:10px; border-bottom:1px solid #ccc; padding-bottom:5px;">Historique des Avancements</h4>
+          <table style="width:100%; border-collapse:collapse; font-size:9px; margin-top:10px;">
+            <thead>
+              <tr style="background-color:#f5f5f5;">
+                <th style="border:1px solid #ddd; padding:4px; text-align:left;">Date Paiement</th>
+                <th style="border:1px solid #ddd; padding:4px; text-align:right;">Montant</th>
+                <th style="border:1px solid #ddd; padding:4px; text-align:left;">Méthode</th>
+                <th style="border:1px solid #ddd; padding:4px; text-align:left;">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${formData.advancements
+                .map(
+                  (a) => `
+                <tr>
+                  <td style="border:1px solid #ddd; padding:4px;">${formatDate(
+                    a.paymentDate
+                  )}</td>
+                  <td style="border:1px solid #ddd; padding:4px; text-align:right;">${parseFloat(
+                    a.amount
+                  ).toFixed(2)} Dh</td>
+                  <td style="border:1px solid #ddd; padding:4px;">${
+                    a.paymentMethod
+                  }</td>
+                 
+                  <td style="border:1px solid #ddd; padding:4px;">${
+                    a.notes || "-"
+                  }</td>
+                </tr>
+              `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `
+          : ""
+      }
+
+      <div style="margin-top:40px; border-top:1px solid #ccc; padding-top:15px;">
+        <p style="margin-top:25px; text-align:center;">
+          Signature et cachet<br>
+          _________________________
+        </p>
+      </div>
+    `;
+
+      document.body.appendChild(pdfContainer);
+
+      // Generate image from HTML content
+      const canvas = await html2canvas(pdfContainer, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#fff",
+      });
+
+      document.body.removeChild(pdfContainer);
+
+      // Convert to PDF
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgHeight = (canvas.height * pageWidth) / canvas.width;
+
+      // ✅ Fix: Avoid duplicate white page
+      if (imgHeight <= pageHeight) {
+        pdf.addImage(imgData, "PNG", 0, 0, pageWidth, imgHeight);
+      } else {
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, "PNG", 0, position, pageWidth, imgHeight);
+        heightLeft -= pageHeight;
+
+        while (heightLeft > 1) {
+          // prevent rounding white page
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, "PNG", 0, position, pageWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
+      }
+
+      pdf.save(`Facture-${invoice.invoiceNumber}.pdf`);
+      topTost("PDF téléchargé avec succès!", "success");
+    } catch (err) {
+      console.error("Erreur PDF:", err);
+      topTost("Erreur lors de la génération du PDF", "error");
+    }
+  };
   return (
     <Modal isOpen={isOpen} toggle={toggle} size="xl">
       <ModalHeader toggle={toggle}>
@@ -462,10 +979,10 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
           {/* Advancements Section */}
           <div className="col-12">
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <h6>Acomptes</h6>
+              <h6>Avances</h6>
               <Button color="primary" size="sm" onClick={addAdvancement}>
                 <FiPlus className="me-1" />
-                Ajouter Acompte
+                Ajouter Avance
               </Button>
             </div>
 
@@ -580,8 +1097,8 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
               </div>
             ) : (
               <div className="alert alert-info">
-                Aucun acompte enregistré. Cliquez sur "Ajouter Acompte" pour en
-                ajouter.
+                Aucun avancement enregistré. Cliquez sur "Ajouter Avance" pour
+                en ajouter.
               </div>
             )}
           </div>
@@ -601,6 +1118,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
           </div>
 
           {/* Items Table */}
+          {/* Items Table */}
           <div className="col-12">
             <h6>Articles</h6>
             <div className="table-responsive">
@@ -614,6 +1132,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
                     <th>Hauteur</th>
                     <th>Prix/Unité</th>
                     <th>Total</th>
+                    <th>Action</th> {/* Add this column */}
                   </tr>
                 </thead>
                 <tbody>
@@ -702,6 +1221,22 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
                           readOnly
                         />
                       </td>
+                      <td>
+                        {/* Add the remove button */}
+                        <Button
+                          color="danger"
+                          size="sm"
+                          onClick={() => removeItem(index)}
+                          disabled={formData.items.length <= 1}
+                          title={
+                            formData.items.length <= 1
+                              ? "Au moins un article est requis"
+                              : "Supprimer cet article"
+                          }
+                        >
+                          <FiTrash2 />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -755,7 +1290,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
                     <span>{totalAfterDiscount.toFixed(2)} Dh</span>
                   </div>
                   <div className="d-flex justify-content-between">
-                    <span>Total Acomptes:</span>
+                    <span>Total Advancenment(s):</span>
                     <span>{totalAdvancement.toFixed(2)} Dh</span>
                   </div>
                   <div className="d-flex justify-content-between fw-bold border-top pt-1">
@@ -770,14 +1305,17 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
       </ModalBody>
 
       <ModalFooter>
-        <button className="btn btn-outline-secondary">
+        <button
+          className="btn btn-outline-primary"
+          onClick={generateAndDownloadPDF} // or generateSimplePDF for the simpler version
+        >
           <FiDownload className="me-2" />
-          Télécharger
+          Télécharger la Facture{" "}
         </button>
-        <button className="btn btn-outline-primary">
+        <Button onClick={handlePrint} color="outline-primary">
           <FiPrinter className="me-2" />
           Imprimer
-        </button>
+        </Button>
         <button
           className="btn btn-primary"
           onClick={handleSubmit}
