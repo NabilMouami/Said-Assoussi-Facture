@@ -37,12 +37,38 @@ Advancement.init(
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    // Add foreign keys for both Invoice and BonLivraison
+    invoiceId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: {
+        model: "invoices",
+        key: "id",
+      },
+    },
+    bonLivraisonId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: {
+        model: "bon_livraisons",
+        key: "id",
+      },
+    },
   },
   {
     sequelize,
     modelName: "Advancement",
     tableName: "advancements",
     timestamps: true,
+    // REMOVE indexes for now - add them later after tables are created
+    // indexes: [
+    //   {
+    //     fields: ["invoiceId"],
+    //   },
+    //   {
+    //     fields: ["bonLivraisonId"],
+    //   },
+    // ],
   }
 );
 

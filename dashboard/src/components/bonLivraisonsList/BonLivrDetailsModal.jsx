@@ -55,7 +55,7 @@ const paymentMethodOptions = [
   { value: "carte", label: "Carte Bancaire" },
 ];
 
-const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
+const BonLivrDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     customerName: "",
@@ -256,7 +256,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
 
     // Validate items - at least one item required
     if (!formData.items || formData.items.length === 0) {
-      topTost("La facture doit avoir au moins un article", "error");
+      topTost("La Bon Livraison doit avoir au moins un article", "error");
       return;
     }
 
@@ -296,9 +296,9 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
     setIsSubmitting(true);
 
     try {
-      // Prepare the data for backend
+      // Prepare the data for backend - match the updateBonLivraison controller structure
       const updateData = {
-        invoiceNumber: invoice.invoiceNumber,
+        deliveryNumber: invoice.deliveryNumber, // Use deliveryNumber instead of invoiceNumber
         customerName: formData.customerName.trim(),
         customerPhone: formData.customerPhone.trim(),
         issueDate: formData.issueDate.toISOString().split("T")[0],
@@ -307,6 +307,9 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
         discountType: formData.discountType,
         discountValue: formData.discountValue,
         paymentType: formData.paymentType,
+        remainingAmount: remainingAmount, // Add remaining amount
+        receiverName: formData.receiverName || "", // Add receiver fields if needed
+        receiverSignature: formData.receiverSignature || "",
         items: formData.items.map((item) => ({
           id: item.id,
           articleName: item.articleName,
@@ -315,6 +318,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
           v2: item.v2,
           v3: item.v3,
           unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice, // Include totalPrice
         })),
         advancements: formData.advancements.map((adv) => ({
           id: adv.id,
@@ -328,34 +332,34 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
 
       console.log("Sending update data to backend:", updateData);
 
+      // FIX: Use the correct endpoint for bonlivraisons
       const response = await axios.put(
-        `${config_url}/api/invoices/${invoice.id}`,
+        `${config_url}/api/bonlivraisons/${invoice.id}`, // Changed from /api/invoices/ to /api/bonlivraisons/
         updateData
       );
 
       console.log("Update response from backend:", response.data);
 
-      topTost("Facture mise à jour avec succès!", "success");
+      topTost("Bon Livraison mise à jour avec succès!", "success");
 
       if (onUpdate) {
-        onUpdate(response.data.invoice || response.data);
+        onUpdate(response.data.bonLivraison || response.data); // Updated to expect bonLivraison
       }
 
       toggle();
     } catch (error) {
-      console.error("Error updating invoice:", error);
+      console.error("Error updating delivery note:", error);
       console.error("Error response data:", error.response?.data);
 
       const errorMessage =
         error.response?.data?.message ||
         error.response?.data?.errors?.[0] ||
-        "Erreur lors de la mise à jour de la facture. Veuillez réessayer.";
+        "Erreur lors de la mise à jour de la Bon Livraison. Veuillez réessayer.";
       topTost(errorMessage, "error");
     } finally {
       setIsSubmitting(false);
     }
   };
-
   const removeItem = (index) => {
     // Create a new array without the item at the specified index
     const updatedItems = formData.items.filter((_, i) => i !== index);
@@ -407,7 +411,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Facture ${invoice.invoiceNumber}</title>
+  <title>Bon Livraison ${invoice.deliveryNumber}</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -488,7 +492,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
 </head>
 <body>
   <div class="header">
-    <h2 style="margin: 0;">Facture</h2>
+    <h2 style="margin: 0;">Bon Livraison</h2>
   </div>
 
   <div class="company-info">
@@ -500,7 +504,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
       <p>Tél: +212 661-431237</p>
     </div>
     <div class="info-block" style="text-align:right;">
-      <p><strong>Facture N°:</strong> ${invoice.invoiceNumber}</p>
+      <p><strong>Bon Livraison N°:</strong> ${invoice.deliveryNumber}</p>
       <p><strong>Date:</strong> ${formatDate(formData.issueDate)}</p>
     </div>
   </div>
@@ -675,7 +679,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
       // Build PDF HTML with advancements history
       pdfContainer.innerHTML = `
       <div style="text-align:center; border-bottom:2px solid #333; padding-bottom:10px; margin-bottom:15px;">
-        <h1 style="margin:0; color:#2c5aa0;">FACTURE</h1>
+        <h1 style="margin:0; color:#2c5aa0;">Bon Livraison</h1>
         <h3 style="margin:5px 0;">Fer-Aluminium-Inox - Assoussi</h3>
         <p style="font-size:10px;">Tél: +212 661-431237  </p>
       </div>
@@ -689,13 +693,10 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
           }</p>
         </div>
         <div>
-          <h4 style="margin-bottom:5px;">Facture</h4>
-          <p><strong>N°:</strong> ${invoice.invoiceNumber}</p>
+          <h4 style="margin-bottom:5px;">Bon Livraison</h4>
+          <p><strong>N°:</strong> ${invoice.deliveryNumber}</p>
           <p><strong>Date:</strong> ${formatDate(formData.issueDate)}</p>
-          <p><strong>Statut:</strong> ${
-            statusOptions.find((opt) => opt.value === formData.status)?.label ||
-            formData.status
-          }</p>
+      
         </div>
       </div>
 
@@ -855,7 +856,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
         }
       }
 
-      pdf.save(`Facture-${invoice.invoiceNumber}.pdf`);
+      pdf.save(`Bon Livraison-${invoice.deliveryNumber}.pdf`);
       topTost("PDF téléchargé avec succès!", "success");
     } catch (err) {
       console.error("Erreur PDF:", err);
@@ -865,7 +866,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
   return (
     <Modal isOpen={isOpen} toggle={toggle} size="xl">
       <ModalHeader toggle={toggle}>
-        Facture #{invoice.invoiceNumber}
+        Bon Livraison #{invoice.invoiceNumber}
         <Badge color={getStatusBadge(formData.status)} className="ms-2">
           {statusOptions.find((opt) => opt.value === formData.status)?.label ||
             formData.status}
@@ -1264,7 +1265,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
             <div className="bg-light p-3 rounded mt-3">
               <div className="row">
                 <div className="col-md-6">
-                  <h6>Résumé de la Facture</h6>
+                  <h6>Résumé de la Bon Livraison</h6>
                   <p>
                     <strong>Client:</strong> {formData.customerName}
                   </p>
@@ -1325,7 +1326,7 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
           onClick={generateAndDownloadPDF} // or generateSimplePDF for the simpler version
         >
           <FiDownload className="me-2" />
-          Télécharger la Facture{" "}
+          Télécharger la Bon Livraison{" "}
         </button>
         <Button onClick={handlePrint} color="outline-primary">
           <FiPrinter className="me-2" />
@@ -1348,4 +1349,4 @@ const InvoiceDetailsModal = ({ isOpen, toggle, invoice, onUpdate }) => {
   );
 };
 
-export default InvoiceDetailsModal;
+export default BonLivrDetailsModal;

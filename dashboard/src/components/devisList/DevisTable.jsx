@@ -8,14 +8,11 @@ import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 import { format, subDays } from "date-fns";
 import {
-  FiEdit,
   FiEye,
   FiFilter,
   FiCalendar,
   FiPlusCircle,
   FiTrash,
-  FiSend,
-  FiUpload,
 } from "react-icons/fi";
 import { config_url } from "@/utils/config";
 import Swal from "sweetalert2";

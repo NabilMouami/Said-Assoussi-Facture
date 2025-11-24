@@ -8,6 +8,7 @@ const userRoutes = require("./routes/user");
 const invoiceRoutes = require("./routes/invoice");
 const devisRoutes = require("./routes/devis");
 const analyticsRoutes = require("./routes/analytics");
+const bonLivraison = require("./routes/bonLivraison");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -66,6 +67,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/invoices", invoiceRoutes);
 app.use("/api/devis", devisRoutes);
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/bonlivraisons", bonLivraison);
 
 // Health check
 app.get("/", (req, res) => res.json({ message: "API running" }));
@@ -99,8 +101,8 @@ app.use((req, res) => {
     await db.sequelize.authenticate();
     console.log("DB connected");
 
-    // Sync database without alter to avoid index issues
-    await db.sequelize.sync();
+    // Use sync without alter to avoid index issues
+    await db.sequelize.sync({ alter: false }); // or just db.sequelize.sync()
     console.log("Database models synchronized");
 
     // Start server

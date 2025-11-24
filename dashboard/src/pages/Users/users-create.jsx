@@ -1,10 +1,8 @@
 import React, { useState } from "react";
-import PageHeader from "@/components/shared/pageHeader/PageHeader";
 import { FiSave } from "react-icons/fi";
 import topTost from "@/utils/topTost";
 import axios from "axios";
 import { config_url } from "@/utils/config";
-import ProposalSent from "@/components/proposalEditCreate/ProposalSent";
 import { FormGroup, Label, Input } from "reactstrap";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
@@ -121,8 +119,6 @@ function UsersCreate() {
           </form>
         </div>
       </div>
-
-      <ProposalSent />
     </>
   );
 }

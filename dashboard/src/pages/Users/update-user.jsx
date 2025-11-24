@@ -12,7 +12,6 @@ import {
 import { useParams } from "react-router-dom";
 import { config_url } from "@/utils/config";
 import axios from "axios";
-import PageHeader from "@/components/shared/pageHeader/PageHeader";
 function UpdateUser() {
   const { id } = useParams(); // URL param: /users/:id
 

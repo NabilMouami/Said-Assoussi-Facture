@@ -7,23 +7,11 @@ import ReportsLeads from "../pages/reports-leads";
 import ReportsProject from "../pages/reports-project";
 import ReportsTimesheets from "../pages/reports-timesheets";
 
-import Proposalist from "../pages/proposal-list";
-import ProposalView from "../pages/proposal-view";
-import ProposalEdit from "../pages/proposal-edit";
-import LeadsList from "../pages/leadsList";
 import UsersList from "../pages/Users/users-list";
 import UsersCreate from "../pages/Users/users-create";
 import UpdateUser from "../pages/Users/update-user";
 
-import ProposalCreate from "../pages/proposal-create";
-import LeadsView from "../pages/leads-view";
-import LeadsCreate from "../pages/leads-create";
-import PaymentList from "../pages/payment-list";
-import PaymentView from "../pages/payment-view/";
 import PaymentCreate from "../pages/payment-create";
-import ProjectsList from "../pages/projects-list";
-import ProjectsView from "../pages/projects-view";
-import ProjectsCreate from "../pages/projects-create";
 
 import LayoutAuth from "../layout/layoutAuth";
 import LoginCreative from "../pages/login-creative";
@@ -34,6 +22,8 @@ import { Navigate } from "react-router-dom";
 import InvoicesList from "../pages/Invoices/invoices-list";
 import DevisCreate from "@/components/payment/DevisCreate";
 import DevisList from "../pages/Devis/devis-list";
+import BonLivraisonsList from "../pages/BonLivraison/bonlivraisons-list";
+import BonLivrCreate from "@/components/payment/BonLivrCreate";
 
 export const router = createBrowserRouter([
   {
@@ -78,22 +68,7 @@ export const router = createBrowserRouter([
         path: "reports/timesheets",
         element: <ReportsTimesheets />,
       },
-      {
-        path: "proposal/list",
-        element: <Proposalist />,
-      },
-      {
-        path: "proposal/view",
-        element: <ProposalView />,
-      },
-      {
-        path: "proposal/edit",
-        element: <ProposalEdit />,
-      },
-      {
-        path: "proposal/create",
-        element: <ProposalCreate />,
-      },
+
       {
         path: "users",
         element: <UsersList />,
@@ -106,14 +81,7 @@ export const router = createBrowserRouter([
         path: "users/update/:id",
         element: <UpdateUser />,
       },
-      {
-        path: "payment/list",
-        element: <PaymentList />,
-      },
-      {
-        path: "payment/view",
-        element: <PaymentView />,
-      },
+
       {
         path: "facture/create",
         element: <PaymentCreate />,
@@ -131,28 +99,12 @@ export const router = createBrowserRouter([
         element: <InvoicesList />,
       },
       {
-        path: "leads/list",
-        element: <LeadsList />,
+        path: "bon-livraisons/list",
+        element: <BonLivraisonsList />,
       },
       {
-        path: "leads/view",
-        element: <LeadsView />,
-      },
-      {
-        path: "leads/create",
-        element: <LeadsCreate />,
-      },
-      {
-        path: "projects/list",
-        element: <ProjectsList />,
-      },
-      {
-        path: "projects/view",
-        element: <ProjectsView />,
-      },
-      {
-        path: "projects/create",
-        element: <ProjectsCreate />,
+        path: "bon-livraison/create",
+        element: <BonLivrCreate />,
       },
     ],
   },

@@ -92,9 +92,28 @@ export const menuList = [
       },
     ],
   },
-
   {
     id: 4,
+    name: "Bon Livraison",
+    path: "#",
+    icon: "feather-file-text",
+    dropdownMenu: [
+      {
+        id: 1,
+        name: "List Bon Livraisons",
+        path: "/bon-livraisons/list",
+        subdropdownMenu: false,
+      },
+      {
+        id: 2,
+        name: "Creer Bon Livr",
+        path: "/bon-livraison/create",
+        subdropdownMenu: false,
+      },
+    ],
+  },
+  {
+    id: 5,
     name: "authentication",
     path: "#",
     icon: "feather-power",
